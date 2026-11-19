@@ -127,6 +127,40 @@ test('SessionStart: a hung CLI is killed; the run ends well inside the hook time
   assert.ok(Date.now() - t0 < 5000);
 });
 
+test('SessionStart: a brainlink in a relative PATH entry (a planted one) is never run', () => {
+  const e = env({ stub: false });
+  const planted = join(e.root, 'brainlink');
+  writeFileSync(planted, `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(join(e.root, 'ran'))}, '1');\n`);
+  chmodSync(planted, 0o755);
+  // With absolute entries, with none at all, and with none set.
+  for (const PATH of ['.:/usr/bin:/bin', '.', '', undefined]) {
+    const r = spawnSync(process.execPath, [join(scripts, 'session-start.mjs')], {
+      cwd: e.root,
+      input: JSON.stringify({ session_id: 's', cwd: e.root }),
+      encoding: 'utf8',
+      env: { ...(PATH === undefined ? {} : { PATH }), CLAUDE_PLUGIN_DATA: join(e.root, 'data'), BRAINLINK_DOMAIN: 'acme' },
+    });
+    assert.equal(r.status, 0, String(PATH));
+    assert.ok(!existsSync(join(e.root, 'ran')), String(PATH));
+    assert.match(ctx(r.stdout), /call get_started/);
+  }
+});
+
+test('SessionStart: a non-executable or directory brainlink earlier in PATH is skipped, as the OS lookup would', () => {
+  const e = env();
+  const early = join(e.root, 'early');
+  mkdirSync(join(early, 'brainlink'), { recursive: true }); // a directory named brainlink
+  const early2 = join(e.root, 'early2');
+  mkdirSync(early2);
+  writeFileSync(join(early2, 'brainlink'), 'not executable');
+  const r = spawnSync(process.execPath, [join(scripts, 'session-start.mjs')], {
+    input: JSON.stringify({ session_id: 's', cwd: e.root }),
+    encoding: 'utf8',
+    env: { PATH: `${early}:${early2}:${join(e.root, 'bin')}:/usr/bin:/bin`, CLAUDE_PLUGIN_DATA: join(e.root, 'data'), BRAINLINK_DOMAIN: 'acme' },
+  });
+  assert.match(ctx(r.stdout), /^Brainlink get_started \(acme\)/);
+});
+
 test('every hook fails open: missing CLI or CLI failure leaves one get_started line; garbage stdin nothing', () => {
   const none = env({ stub: false });
   const bad = env();

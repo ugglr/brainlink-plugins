@@ -3,8 +3,8 @@
 // no hook blocks on purpose either.
 // The `brainlink` CLI holds its own login; nothing secret is read or printed here.
 import { spawnSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { readFileSync, existsSync, statSync, accessSync, constants } from 'node:fs';
+import { delimiter, dirname, isAbsolute, join } from 'node:path';
 import { homedir } from 'node:os';
 
 export const CAP_BYTES = 1024; // injected tool-trigger memories
@@ -18,11 +18,37 @@ export function readInput() {
   }
 }
 
+// The CLI is found here and spawned by absolute path, never by bare name: on
+// Windows a bare name is looked up in the working directory first, and that is
+// the project, where a cloned repo could plant its own `brainlink`. Only
+// absolute PATH entries count (`.` or an empty entry is the project too), and
+// only an executable file, as the OS lookup would. The CLI inherits the same
+// clean PATH. The working directory is kept: the CLI picks a pinned account
+// from it. A list, not a string: ''.split() would give back [''], the project.
+const SAFE_DIRS = (process.env.PATH || '').split(delimiter).filter(isAbsolute);
+
+function cliPath() {
+  for (const dir of SAFE_DIRS) {
+    const p = join(dir, 'brainlink');
+    try {
+      if (!statSync(p).isFile()) continue;
+      accessSync(p, constants.X_OK);
+      return p;
+    } catch {
+      /* not here, or not executable */
+    }
+  }
+  return null;
+}
+
 // Run `brainlink <args>`; returns stdout, or null on a missing CLI, timeout,
 // non-zero exit (not logged in, server down) or empty output.
 export function brainlink(args, timeoutMs) {
   try {
-    const r = spawnSync('brainlink', args, {
+    const cli = cliPath();
+    if (!cli) return null;
+    const r = spawnSync(cli, args, {
+      env: { ...process.env, PATH: SAFE_DIRS.join(delimiter) },
       encoding: 'utf8',
       timeout: Math.min(timeoutMs, Number(process.env.BRAINLINK_HOOK_TIMEOUT_MS) || Infinity),
       killSignal: 'SIGKILL',
