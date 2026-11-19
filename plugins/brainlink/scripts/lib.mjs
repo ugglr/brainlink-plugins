@@ -4,7 +4,7 @@
 // The `brainlink` CLI holds its own login; nothing secret is read or printed here.
 import { spawnSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, isAbsolute, join } from 'node:path';
 import { homedir } from 'node:os';
 
 export const CAP_BYTES = 1024; // injected tool-trigger memories
@@ -18,11 +18,26 @@ export function readInput() {
   }
 }
 
+// The CLI from an absolute PATH entry only: a relative entry (`.`, or an empty
+// one) would resolve inside the project, where a cloned repo could plant its
+// own `brainlink`. The working directory is kept: the CLI picks a pinned
+// account from it.
+function cliPath() {
+  for (const dir of (process.env.PATH || '').split(delimiter)) {
+    if (!isAbsolute(dir)) continue;
+    const p = join(dir, 'brainlink');
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+
 // Run `brainlink <args>`; returns stdout, or null on a missing CLI, timeout,
 // non-zero exit (not logged in, server down) or empty output.
 export function brainlink(args, timeoutMs) {
   try {
-    const r = spawnSync('brainlink', args, {
+    const cli = cliPath();
+    if (!cli) return null;
+    const r = spawnSync(cli, args, {
       encoding: 'utf8',
       timeout: Math.min(timeoutMs, Number(process.env.BRAINLINK_HOOK_TIMEOUT_MS) || Infinity),
       killSignal: 'SIGKILL',

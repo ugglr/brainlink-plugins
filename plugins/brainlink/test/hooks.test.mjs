@@ -127,6 +127,22 @@ test('SessionStart: a hung CLI is killed; the run ends well inside the hook time
   assert.ok(Date.now() - t0 < 5000);
 });
 
+test('SessionStart: a brainlink in a relative PATH entry (a planted one) is never run', () => {
+  const e = env({ stub: false });
+  const planted = join(e.root, 'brainlink');
+  writeFileSync(planted, `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(join(e.root, 'ran'))}, '1');\n`);
+  chmodSync(planted, 0o755);
+  const r = spawnSync(process.execPath, [join(scripts, 'session-start.mjs')], {
+    cwd: e.root,
+    input: JSON.stringify({ session_id: 's', cwd: e.root }),
+    encoding: 'utf8',
+    env: { PATH: `.:/usr/bin:/bin`, CLAUDE_PLUGIN_DATA: join(e.root, 'data'), BRAINLINK_DOMAIN: 'acme' },
+  });
+  assert.equal(r.status, 0);
+  assert.ok(!existsSync(join(e.root, 'ran')));
+  assert.match(ctx(r.stdout), /call get_started/);
+});
+
 test('every hook fails open: missing CLI or CLI failure leaves one get_started line; garbage stdin nothing', () => {
   const none = env({ stub: false });
   const bad = env();
