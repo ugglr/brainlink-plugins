@@ -143,6 +143,21 @@ test('SessionStart: a brainlink in a relative PATH entry (a planted one) is neve
   assert.match(ctx(r.stdout), /call get_started/);
 });
 
+test('SessionStart: a non-executable or directory brainlink earlier in PATH is skipped, as the OS lookup would', () => {
+  const e = env();
+  const early = join(e.root, 'early');
+  mkdirSync(join(early, 'brainlink'), { recursive: true }); // a directory named brainlink
+  const early2 = join(e.root, 'early2');
+  mkdirSync(early2);
+  writeFileSync(join(early2, 'brainlink'), 'not executable');
+  const r = spawnSync(process.execPath, [join(scripts, 'session-start.mjs')], {
+    input: JSON.stringify({ session_id: 's', cwd: e.root }),
+    encoding: 'utf8',
+    env: { PATH: `${early}:${early2}:${join(e.root, 'bin')}:/usr/bin:/bin`, CLAUDE_PLUGIN_DATA: join(e.root, 'data'), BRAINLINK_DOMAIN: 'acme' },
+  });
+  assert.match(ctx(r.stdout), /^Brainlink get_started \(acme\)/);
+});
+
 test('every hook fails open: missing CLI or CLI failure leaves one get_started line; garbage stdin nothing', () => {
   const none = env({ stub: false });
   const bad = env();

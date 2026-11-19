@@ -3,7 +3,7 @@
 // no hook blocks on purpose either.
 // The `brainlink` CLI holds its own login; nothing secret is read or printed here.
 import { spawnSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, statSync, accessSync, constants } from 'node:fs';
 import { delimiter, dirname, isAbsolute, join } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -18,17 +18,39 @@ export function readInput() {
   }
 }
 
-// Look the CLI up on absolute PATH entries only: a relative entry (`.`, or an
-// empty one) would resolve inside the project, where a cloned repo could plant
-// its own `brainlink`. The CLI inherits the same PATH. The working directory is
-// kept: the CLI picks a pinned account from it.
+// The CLI is found here and spawned by absolute path, never by bare name: on
+// Windows a bare name is looked up in the working directory first, and that is
+// the project, where a cloned repo could plant its own `brainlink`. Only
+// absolute PATH entries count (`.` or an empty entry is the project too), and
+// only an executable file, as the OS lookup would. The CLI inherits the same
+// clean PATH. The working directory is kept: the CLI picks a pinned account
+// from it.
 const SAFE_PATH = (process.env.PATH || '').split(delimiter).filter(isAbsolute).join(delimiter);
+const EXTS = process.platform === 'win32' ? (process.env.PATHEXT || '.EXE;.CMD').split(';') : [''];
+
+function cliPath() {
+  for (const dir of SAFE_PATH.split(delimiter)) {
+    for (const ext of EXTS) {
+      const p = join(dir, `brainlink${ext}`);
+      try {
+        if (!statSync(p).isFile()) continue;
+        accessSync(p, constants.X_OK);
+        return p;
+      } catch {
+        /* not here, or not executable */
+      }
+    }
+  }
+  return null;
+}
 
 // Run `brainlink <args>`; returns stdout, or null on a missing CLI, timeout,
 // non-zero exit (not logged in, server down) or empty output.
 export function brainlink(args, timeoutMs) {
   try {
-    const r = spawnSync('brainlink', args, {
+    const cli = cliPath();
+    if (!cli) return null;
+    const r = spawnSync(cli, args, {
       env: { ...process.env, PATH: SAFE_PATH },
       encoding: 'utf8',
       timeout: Math.min(timeoutMs, Number(process.env.BRAINLINK_HOOK_TIMEOUT_MS) || Infinity),
