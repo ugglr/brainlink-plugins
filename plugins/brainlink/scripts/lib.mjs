@@ -18,26 +18,18 @@ export function readInput() {
   }
 }
 
-// The CLI from an absolute PATH entry only: a relative entry (`.`, or an empty
-// one) would resolve inside the project, where a cloned repo could plant its
-// own `brainlink`. The working directory is kept: the CLI picks a pinned
-// account from it.
-function cliPath() {
-  for (const dir of (process.env.PATH || '').split(delimiter)) {
-    if (!isAbsolute(dir)) continue;
-    const p = join(dir, 'brainlink');
-    if (existsSync(p)) return p;
-  }
-  return null;
-}
+// Look the CLI up on absolute PATH entries only: a relative entry (`.`, or an
+// empty one) would resolve inside the project, where a cloned repo could plant
+// its own `brainlink`. The CLI inherits the same PATH. The working directory is
+// kept: the CLI picks a pinned account from it.
+const SAFE_PATH = (process.env.PATH || '').split(delimiter).filter(isAbsolute).join(delimiter);
 
 // Run `brainlink <args>`; returns stdout, or null on a missing CLI, timeout,
 // non-zero exit (not logged in, server down) or empty output.
 export function brainlink(args, timeoutMs) {
   try {
-    const cli = cliPath();
-    if (!cli) return null;
-    const r = spawnSync(cli, args, {
+    const r = spawnSync('brainlink', args, {
+      env: { ...process.env, PATH: SAFE_PATH },
       encoding: 'utf8',
       timeout: Math.min(timeoutMs, Number(process.env.BRAINLINK_HOOK_TIMEOUT_MS) || Infinity),
       killSignal: 'SIGKILL',
