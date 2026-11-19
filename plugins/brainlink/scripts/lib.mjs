@@ -24,21 +24,18 @@ export function readInput() {
 // absolute PATH entries count (`.` or an empty entry is the project too), and
 // only an executable file, as the OS lookup would. The CLI inherits the same
 // clean PATH. The working directory is kept: the CLI picks a pinned account
-// from it.
-const SAFE_PATH = (process.env.PATH || '').split(delimiter).filter(isAbsolute).join(delimiter);
-const EXTS = process.platform === 'win32' ? (process.env.PATHEXT || '.EXE;.CMD').split(';') : [''];
+// from it. A list, not a string: ''.split() would give back [''], the project.
+const SAFE_DIRS = (process.env.PATH || '').split(delimiter).filter(isAbsolute);
 
 function cliPath() {
-  for (const dir of SAFE_PATH.split(delimiter)) {
-    for (const ext of EXTS) {
-      const p = join(dir, `brainlink${ext}`);
-      try {
-        if (!statSync(p).isFile()) continue;
-        accessSync(p, constants.X_OK);
-        return p;
-      } catch {
-        /* not here, or not executable */
-      }
+  for (const dir of SAFE_DIRS) {
+    const p = join(dir, 'brainlink');
+    try {
+      if (!statSync(p).isFile()) continue;
+      accessSync(p, constants.X_OK);
+      return p;
+    } catch {
+      /* not here, or not executable */
     }
   }
   return null;
@@ -51,7 +48,7 @@ export function brainlink(args, timeoutMs) {
     const cli = cliPath();
     if (!cli) return null;
     const r = spawnSync(cli, args, {
-      env: { ...process.env, PATH: SAFE_PATH },
+      env: { ...process.env, PATH: SAFE_DIRS.join(delimiter) },
       encoding: 'utf8',
       timeout: Math.min(timeoutMs, Number(process.env.BRAINLINK_HOOK_TIMEOUT_MS) || Infinity),
       killSignal: 'SIGKILL',
