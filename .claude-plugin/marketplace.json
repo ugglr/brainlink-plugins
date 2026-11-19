@@ -1,0 +1,12 @@
+{
+  "name": "brainlink",
+  "description": "Brainlink plugins for Claude Code and Codex",
+  "owner": { "name": "Brainlink" },
+  "plugins": [
+    {
+      "name": "brainlink",
+      "source": "./plugins/brainlink",
+      "description": "Brainlink shared memory: MCP server and skill for Claude Code and Codex; Claude Code hooks add a nudge to save what the next session needs"
+    }
+  ]
+}

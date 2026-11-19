@@ -1,0 +1,11 @@
+{
+  "name": "brainlink",
+  "displayName": "Brainlink",
+  "version": "0.2.6",
+  "description": "Brainlink shared memory: the MCP server and skill for Claude Code and Codex, plus Claude Code hooks that nudge you to save what the next session needs (and load your rules at session start with the brainlink CLI).",
+  "author": { "name": "Brainlink" },
+  "homepage": "https://github.com/ugglr/brainlink-plugins",
+  "repository": "https://github.com/ugglr/brainlink-plugins",
+  "license": "MIT",
+  "keywords": ["memory", "mcp", "brainlink"]
+}

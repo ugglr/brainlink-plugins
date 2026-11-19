@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "brainlink": {
+      "type": "http",
+      "url": "https://brainlink-synapse-z5zix.ondigitalocean.app/mcp/oauth"
+    }
+  }
+}
