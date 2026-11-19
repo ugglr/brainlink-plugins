@@ -26,6 +26,11 @@ codex plugin marketplace add ugglr/brainlink-plugins && codex plugin add brainli
 codex mcp login brainlink
 ```
 
+Already connected to Brainlink another way (the claude.ai connector in Claude Code, the ChatGPT connector in Codex)? The plugin's server has the same URL, and in Claude Code it takes the connector's place, so sign in to it once with `/mcp`. To keep your connector instead, drop just the plugin's server and keep its hooks and skill:
+
+- Claude Code, in `~/.claude/settings.json`: `"deniedMcpServers": [{ "serverName": "plugin:brainlink:brainlink" }]` (by name: a `serverUrl` entry would block the connector too).
+- Codex, in `~/.codex/config.toml`: a `[mcp_servers.brainlink]` table with the same `url` and `enabled = false`.
+
 No key is stored in the plugin or your config. Tell it which domain a project belongs to with a `.brainlink` file holding the domain slug at the repo root, or `BRAINLINK_DOMAIN`.
 
 The `brainlink` CLI is not published yet. Until it is, `SessionStart` adds one line asking the agent to call `get_started` itself, and the two hooks that read what the CLI fetched (`SubagentStart` rules, `PreToolUse` triggers) do nothing.
