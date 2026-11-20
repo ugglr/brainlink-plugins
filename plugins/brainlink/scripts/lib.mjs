@@ -140,7 +140,6 @@ export function domainState(cwd) {
   return { state: 'absent' };
 }
 
-export const findDomain = (cwd) => domainState(cwd).domain ?? null;
 
 // The `items` of a search result: [{ slug, preview, tags, ... }]. Non-JSON gives [].
 export function parseItems(raw) {
