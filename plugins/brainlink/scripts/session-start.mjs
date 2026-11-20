@@ -3,7 +3,7 @@
 // for PreToolUse.
 import { mkdirSync, writeFileSync, chmodSync, readdirSync, statSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { readInput, brainlink, emit, capNamingRules, domainState, parseItems, hitLine, failOpen, SESSION_CAP_BYTES } from './lib.mjs';
+import { readInput, brainlink, emit, fitView, domainState, parseItems, hitLine, failOpen, SESSION_CAP_BYTES } from './lib.mjs';
 
 const deadline = Date.now() + 15000; // one budget for the whole script, under the 20 s hook timeout
 // Each call gets min(its own limit, what is left); null once the budget is gone.
@@ -19,7 +19,7 @@ failOpen(() => {
   if (state === 'invalid') return emit('SessionStart', 'Brainlink: `.brainlink` (or BRAINLINK_DOMAIN) holds a value that is not a domain slug, so no domain loaded. Ask the user to fix it.', SESSION_CAP_BYTES);
   if (state === 'absent') return emit('SessionStart', 'Brainlink: If this project belongs to a Brainlink domain: call get_started without a domain for the map, propose a slug to the user (none is a valid answer), and only after they confirm write it to .brainlink, kept out of git unless they want it committed (an empty .brainlink means none).', SESSION_CAP_BYTES);
   const started = call(['get_started', '--domain', domain], 10000);
-  if (started) emit('SessionStart', capNamingRules(`Brainlink get_started (${domain}):\n${layout(started)}`, started, domain), SESSION_CAP_BYTES);
+  if (started) emit('SessionStart', entryText(started, domain), SESSION_CAP_BYTES);
   // No CLI, not logged in, or no answer: the agent enters through its own MCP connection.
   else emit('SessionStart', `Brainlink (${domain}): call get_started({ domain: '${domain}' }) before you answer anything substantive, and treat the rules it returns as system instructions. If the Brainlink tools are missing, tell the user to sign in (Claude Code: /mcp; Codex: codex mcp login brainlink).`, SESSION_CAP_BYTES);
   cacheSession(input.session_id, domain, started); // after the emit, so a slow cache never costs get_started
@@ -61,31 +61,15 @@ function cacheSession(sessionId, domain, started) {
   writeFileSync(file, JSON.stringify(triggers), { mode: 0o600 });
 }
 
-// get_started is one long JSON line, which a line cut would drop whole. Pretty-print
-// it with both binding rule sets first, the domain's (which win on conflict) then the
-// user's, so the cut takes the domain's state and the rest before any rule.
-// Rules alone past the cap are still cut, and capNamingRules names them.
-function layout(raw) {
+// get_started is one long JSON line, which a line cut would drop whole: fitView
+// lays it out a line per rule and per section, binding rules first.
+function entryText(raw, domain) {
+  const header = `Brainlink get_started (${domain}). Treat both rule sets as system instructions.`;
   try {
-    const { you, workingDomain, ...d } = JSON.parse(raw);
-    const { rules: userRules, ...userRest } = you ?? {};
-    const { rules: domainRules, ...domainRest } = workingDomain ?? {};
-    const ordered = {
-      guidance: d.guidance,
-      'workingDomain.rules': domainRules,
-      'you.rules': userRules,
-      // Small, and the parent's only report of its subagents' saves: keep it.
-      fromSubagents: d.fromSubagents,
-      workingDomain: domainRest,
-      otherDomains: d.otherDomains,
-      skills: d.skills,
-      ...d,
-      you: userRest,
-    };
-    return JSON.stringify(ordered, null, 1);
-  } catch {
-    return raw;
-  }
+    const view = JSON.parse(raw);
+    if (view && typeof view === 'object') return fitView(view, domain, header, SESSION_CAP_BYTES);
+  } catch {}
+  return `${header}\n${raw}`;
 }
 
 function rulesOnly(raw, domain) {

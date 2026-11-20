@@ -67,11 +67,11 @@ export function brainlink(args, timeoutMs) {
 // memory is one line, so a cut never lands mid-hit; '' if the first line alone is too big.
 const CUT_NOTE = '[Brainlink: cut to fit the hook limit; call get_started or search for the rest]';
 
-// Whole lines of `text` within `max` UTF-8 bytes. A cut ends with `note` so
+// Whole lines of `text` within `max` UTF-8 bytes. A cut ends with CUT_NOTE so
 // the model knows something (possibly rules) was dropped.
-export function capBytes(text, max, note = CUT_NOTE) {
+export function capBytes(text, max) {
   if (Buffer.byteLength(text) <= max) return text;
-  const budget = max - Buffer.byteLength(note) - 1;
+  const budget = max - Buffer.byteLength(CUT_NOTE) - 1;
   const out = [];
   let used = 0;
   for (const line of text.split('\n')) {
@@ -80,28 +80,65 @@ export function capBytes(text, max, note = CUT_NOTE) {
     out.push(line);
     used += add;
   }
-  return out.length ? `${out.join('\n')}\n${note}` : '';
+  return out.length ? `${out.join('\n')}\n${CUT_NOTE}` : '';
 }
 
-// A cut that lands in the rules ends with a note naming each binding rule it
-// dropped, so the session knows it is missing rules, and which. A
-// bigger note leaves less room and can cut more rules, so it is redone
-// until the list holds still; the list only grows, so this ends.
-export function capNamingRules(text, raw, domain) {
-  let rules = [];
-  try {
-    const { workingDomain, you } = JSON.parse(raw);
-    rules = [...(workingDomain?.rules ?? []), ...(you?.rules ?? [])].filter((r) => typeof r?.content === 'string');
-  } catch {}
-  let out = capBytes(text, SESSION_CAP_BYTES);
-  let note;
-  for (;;) {
-    const cut = rules.filter((r) => !out.includes(JSON.stringify(r.content))).map((r) => r.slug);
-    const next = `[Brainlink: cut to fit the hook limit, which dropped ${cut.length} binding rules: ${cut.join(', ')}. Call get_started({ domain: '${domain}' }) or run \`brainlink get_started --domain ${domain}\`, and follow them before acting]`;
-    if (!cut.length || next === note) return out;
-    note = next;
-    out = capBytes(text, SESSION_CAP_BYTES, note);
+// get_started as whole lines in priority order: the binding rule sets one rule
+// per line, then the open threads and projects, then everything else in the
+// order get_started sent it. Over `max`, a rule is kept whole or left out, and
+// every other section too, so no cut lands inside either. A cut ends with
+// cutNote, which counts rather than names, so the room it takes stays small.
+const RULE_SETS = [
+  ['workingDomain.rules', 'binding here; they win over you.rules on conflict'],
+  ['you.rules', 'binding in every domain'],
+];
+const NEXT = ['workingDomain.openThreads', 'workingDomain.projects', 'workingDomain.staleProjects', 'workingDomain.pointers', 'fromSubagents', 'guidance'];
+
+const cutNote = (domain, rules, sections) => {
+  const call = `get_started({ domain: '${domain}' }) (no Brainlink tools: run \`brainlink get_started --domain ${domain}\`)`;
+  if (rules) return `[Brainlink: ${rules} binding rule${rules === 1 ? ' was' : 's were'} left out to fit the hook limit${sections ? `, and ${sections} other section${sections === 1 ? '' : 's'}` : ''}. Call ${call} now to read them, and follow them before acting.]`;
+  return `[Brainlink: ${sections} section${sections === 1 ? ' was' : 's were'} left out to fit the hook limit. ${call} returns them.]`;
+};
+
+export function fitView(view, domain, header, max) {
+  const sections = new Map();
+  for (const [k, v] of Object.entries(view)) {
+    if ((k === 'you' || k === 'workingDomain') && v && typeof v === 'object') {
+      for (const [s, sv] of Object.entries(v)) sections.set(`${k}.${s}`, sv);
+    } else sections.set(k, v);
   }
+  const rules = RULE_SETS.map(([name, why]) => {
+    const items = sections.get(name);
+    return [`${name} (${why}):`, Array.isArray(items) ? items : []];
+  });
+  const ruleNames = RULE_SETS.map(([name]) => name);
+  const rest = [...NEXT.filter((n) => sections.has(n)), ...[...sections.keys()].filter((n) => !NEXT.includes(n) && !ruleNames.includes(n))];
+  const fit = (budget) => {
+    const lines = [];
+    let left = budget;
+    const take = (line) => {
+      const b = Buffer.byteLength(line) + 1;
+      if (b > left) return false;
+      lines.push(line);
+      left -= b;
+      return true;
+    };
+    take(header);
+    let rulesLeftOut = 0;
+    for (const [title, items] of rules) {
+      // No heading, no rules under it: they would read as the other set's.
+      if (!take(title)) rulesLeftOut += items.length;
+      else for (const r of items) if (!take(JSON.stringify(r))) rulesLeftOut++;
+    }
+    const sectionsLeftOut = rest.filter((n) => !take(`${n}: ${JSON.stringify(sections.get(n))}`)).length;
+    return { lines, rulesLeftOut, sectionsLeftOut };
+  };
+  const whole = fit(max);
+  if (whole.rulesLeftOut === 0 && whole.sectionsLeftOut === 0) return whole.lines.join('\n');
+  // Room for the largest note: every count at its upper bound.
+  const ruleCount = rules.reduce((n, [, items]) => n + items.length, 0);
+  const cut = fit(max - Buffer.byteLength(cutNote(domain, ruleCount, rest.length)) - 1);
+  return [...cut.lines, cutNote(domain, cut.rulesLeftOut, cut.sectionsLeftOut)].join('\n');
 }
 
 export function emit(eventName, text, max) {
