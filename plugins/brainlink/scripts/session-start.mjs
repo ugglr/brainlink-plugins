@@ -3,7 +3,7 @@
 // for PreToolUse.
 import { mkdirSync, writeFileSync, chmodSync, readdirSync, statSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { readInput, brainlink, emit, capNamingRules, findDomain, parseItems, hitLine, failOpen, SESSION_CAP_BYTES } from './lib.mjs';
+import { readInput, brainlink, emit, capNamingRules, domainState, parseItems, hitLine, failOpen, SESSION_CAP_BYTES } from './lib.mjs';
 
 const deadline = Date.now() + 15000; // one budget for the whole script, under the 20 s hook timeout
 // Each call gets min(its own limit, what is left); null once the budget is gone.
@@ -14,8 +14,10 @@ const call = (args, ownMs) => {
 
 failOpen(() => {
   const input = readInput();
-  const domain = findDomain(input.cwd);
-  if (!domain) return;
+  const { state, domain } = domainState(input.cwd);
+  if (state === 'none') return;
+  if (state === 'invalid') return emit('SessionStart', 'Brainlink: `.brainlink` (or BRAINLINK_DOMAIN) holds a value that is not a domain slug, so no domain loaded. Ask the user to fix it.', SESSION_CAP_BYTES);
+  if (state === 'absent') return emit('SessionStart', 'Brainlink: If this project belongs to a Brainlink domain: call get_started without a domain for the map, propose a slug to the user (none is a valid answer), and only after they confirm write it to .brainlink, kept out of git unless they want it committed (an empty .brainlink means none).', SESSION_CAP_BYTES);
   const started = call(['get_started', '--domain', domain], 10000);
   if (started) emit('SessionStart', capNamingRules(`Brainlink get_started (${domain}):\n${layout(started)}`, started, domain), SESSION_CAP_BYTES);
   // No CLI, not logged in, or no answer: the agent enters through its own MCP connection.

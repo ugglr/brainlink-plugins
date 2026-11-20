@@ -7,7 +7,7 @@
 // back in their report. No network call.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { readInput, findDomain, emit, isWork, isMerge, isMcpMutation, failOpen, CAP_BYTES } from './lib.mjs';
+import { readInput, domainState, emit, isWork, isMerge, isMcpMutation, failOpen, CAP_BYTES } from './lib.mjs';
 
 const QUIET_MS = 30 * 60_000;
 
@@ -16,7 +16,7 @@ failOpen(() => {
   const dataDir = process.env.CLAUDE_PLUGIN_DATA;
   const { session_id: sid, tool_name: tool = '' } = input;
   if (!dataDir || !sid || !/^[\w-]+$/.test(sid) || input.agent_id) return;
-  const domain = findDomain(input.cwd);
+  const domain = domainState(input.cwd).domain;
   if (!domain) return;
   const cmd = typeof input.tool_input?.command === 'string' ? input.tool_input.command : '';
   const what = isWork(cmd)
