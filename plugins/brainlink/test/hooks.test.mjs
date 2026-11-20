@@ -257,53 +257,74 @@ test('matchTool: exact, prefix, suffix, ordered middle, no regex from data', () 
   assert.ok(matchTool('a(b', 'a(b'));
 });
 
-test('SessionStart: a one-line JSON get_started over the cap is laid out and cut on a line', () => {
+// A get_started stub that prints `started` and returns the hook's context.
+const startedWith = (started) => {
   const e = env();
-  const big = join(e.root, 'bin', 'brainlink');
-  writeFileSync(big, `#!${process.execPath}\nconsole.log(JSON.stringify({ you: { n: 'y'.repeat(20000) }, workingDomain: { rules: ['r1', 'r2'] } }));\n`);
-  const text = ctx(e.run('session-start.mjs', { session_id: 's', cwd: e.root }, { BRAINLINK_DOMAIN: 'acme' }).out);
-  assert.match(text, /workingDomain/);
-  assert.match(text, /r1/);
-  assert.match(text, /\[Brainlink: cut to fit[^\n]*$/);
+  writeFileSync(join(e.root, 'bin', 'brainlink'), `#!${process.execPath}\nconsole.log(${JSON.stringify(JSON.stringify(started))});\n`);
+  return ctx(e.run('session-start.mjs', { session_id: 's', cwd: e.root }, { BRAINLINK_DOMAIN: 'acme' }).out);
+};
+
+test('SessionStart: a one-line JSON get_started over the cap is laid out a line per section, the big one left out whole', () => {
+  const text = startedWith({ you: { n: 'y'.repeat(20000) }, workingDomain: { rules: ['r1', 'r2'] } });
+  assert.match(text, /^workingDomain\.rules \(/m);
+  assert.match(text, /^"r1"$/m);
+  assert.doesNotMatch(text, /yyy/);
+  assert.equal(text.split('\n').at(-1), "[Brainlink: left out to fit the hook limit: you.n. get_started({ domain: 'acme' }) returns them.]");
   assert.ok(Buffer.byteLength(text) <= 9500);
 });
 
-test('SessionStart: both rule sets come first, domain then user, so a cut takes state before any rule', () => {
-  const e = env();
-  const big = join(e.root, 'bin', 'brainlink');
+test('SessionStart: domain rules, then user rules, then threads and projects; lower sections leave whole', () => {
   const started = {
     guidance: 'g',
-    workingDomain: { pickUpHere: 'p'.repeat(6000), rules: ['domain-rule'], projects: 'x'.repeat(6000) },
     you: { facts: 'f'.repeat(6000), rules: ['user-rule'] },
+    workingDomain: { rules: ['domain-rule'], pickUpHere: 'p'.repeat(6000), projects: 'x'.repeat(6000) },
     fromSubagents: [{ handoff: 'h', slugs: ['sub-save'], total: 1 }],
   };
-  writeFileSync(big, `#!${process.execPath}\nconsole.log(${JSON.stringify(JSON.stringify(started))});\n`);
-  const text = ctx(e.run('session-start.mjs', { session_id: 's', cwd: e.root }, { BRAINLINK_DOMAIN: 'acme' }).out);
-  assert.ok(text.indexOf('domain-rule') > 0 && text.indexOf('domain-rule') < text.indexOf('user-rule'));
-  assert.ok(text.indexOf('user-rule') < text.indexOf('sub-save') && text.indexOf('sub-save') < text.indexOf('ppp'));
-  assert.doesNotMatch(text, /xxx|fff/);
-  assert.match(text, /\[Brainlink: cut to fit[^\n]*$/);
+  const text = startedWith(started);
+  const at = (s) => text.indexOf(s);
+  assert.ok(at('domain-rule') > 0 && at('domain-rule') < at('user-rule'));
+  assert.ok(at('user-rule') < at('xxx') && at('xxx') < at('sub-save'));
+  assert.doesNotMatch(text, /ppp|fff/);
+  assert.match(text.split('\n').at(-1), /^\[Brainlink: left out to fit the hook limit: you\.facts, workingDomain\.pickUpHere\./);
 });
 
-test('SessionStart: rules past the cap are named in the cut note, each rule either whole or named', () => {
-  const e = env();
-  const big = join(e.root, 'bin', 'brainlink');
-  const rule = (s) => ({ slug: s, content: `${s} says ${'z'.repeat(345)}` });
+test('SessionStart: a warmhand-sized view keeps every domain rule, whole user rules as fit, and counts the rest', () => {
+  // 8 KB of domain rules, 2.4 KB of user rules, then the state.
+  const rule = (s) => ({ slug: s, content: `${s} says ${'z'.repeat(370 - s.length)}` });
   const started = {
-    guidance: 'g',
-    workingDomain: { rules: Array.from({ length: 20 }, (_, i) => rule(`dom-${i}`)), pickUpHere: 'p' },
-    you: { rules: Array.from({ length: 10 }, (_, i) => rule(`usr-${i}`)) },
+    guidance: 'g'.repeat(600),
+    you: { email: 'a@b.c', rules: Array.from({ length: 6 }, (_, i) => rule(`usr-${i}`)) },
+    workingDomain: {
+      rules: Array.from({ length: 20 }, (_, i) => rule(`dom-${i}`)),
+      openThreads: [{ slug: 'open-q', question: 'Why?' }],
+      pickUpHere: { slug: 'last', content: 'p'.repeat(1300) },
+    },
   };
-  writeFileSync(big, `#!${process.execPath}\nconsole.log(${JSON.stringify(JSON.stringify(started))});\n`);
-  const text = ctx(e.run('session-start.mjs', { session_id: 's', cwd: e.root }, { BRAINLINK_DOMAIN: 'acme' }).out);
+  const text = startedWith(started);
   assert.ok(Buffer.byteLength(text) <= 9500);
-  const note = text.split('\n').at(-1);
-  const named = note.match(/binding rules: ([^.]*)\./)[1].split(', ');
-  const all = [...started.workingDomain.rules, ...started.you.rules];
-  const whole = all.filter((r) => text.includes(JSON.stringify(r.content))).map((r) => r.slug);
-  assert.ok(whole.includes('dom-0') && named.includes('usr-9'));
-  assert.deepEqual([...whole, ...named], all.map((r) => r.slug));
-  assert.ok(note.includes(`dropped ${named.length} binding rules`) && note.includes("get_started({ domain: 'acme' })"));
+  const lines = text.split('\n');
+  const kept = lines.filter((l) => l.startsWith('{"slug":')).map((l) => JSON.parse(l).slug);
+  const all = [...started.workingDomain.rules, ...started.you.rules].map((r) => r.slug);
+  assert.deepEqual(kept, all.slice(0, kept.length));
+  assert.ok(kept.includes('dom-19') && kept.length < all.length);
+  // Small sections fill what a left-out rule could not use.
+  assert.match(text, /^workingDomain\.openThreads: /m);
+  const left = all.length - kept.length;
+  assert.equal(
+    lines.at(-1),
+    `[Brainlink: ${left} binding rules were left out to fit the hook limit, and the sections guidance, workingDomain.pickUpHere. Call get_started({ domain: 'acme' }) now to read them, and follow them before acting.]`,
+  );
+});
+
+test('SessionStart: a view that fits comes whole, with no cut line', () => {
+  const text = startedWith({ guidance: 'g', you: { rules: [{ slug: 'u', content: 'c' }] }, workingDomain: { rules: [], pickUpHere: null } });
+  assert.deepEqual(text.split('\n').slice(1), [
+    'workingDomain.rules (binding here; they win over you.rules on conflict):',
+    'you.rules (binding in every domain):',
+    '{"slug":"u","content":"c"}',
+    'guidance: "g"',
+    'workingDomain.pickUpHere: null',
+  ]);
 });
 
 const postRun = (e, input) =>
