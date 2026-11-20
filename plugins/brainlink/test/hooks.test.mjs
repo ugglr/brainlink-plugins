@@ -6,7 +6,7 @@ import { readFileSync, symlinkSync, mkdtempSync, writeFileSync, chmodSync, mkdir
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { matchTool } from '../scripts/lib.mjs';
+import { matchTool, fitView } from '../scripts/lib.mjs';
 
 const scripts = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts');
 
@@ -269,7 +269,7 @@ test('SessionStart: a one-line JSON get_started over the cap is laid out a line 
   assert.match(text, /^workingDomain\.rules \(/m);
   assert.match(text, /^"r1"$/m);
   assert.doesNotMatch(text, /yyy/);
-  assert.equal(text.split('\n').at(-1), "[Brainlink: left out to fit the hook limit: you.n. get_started({ domain: 'acme' }) returns them.]");
+  assert.equal(text.split('\n').at(-1), `[Brainlink: 1 section was left out to fit the hook limit. get_started({ domain: 'acme' }) (no Brainlink tools: run \`brainlink get_started --domain acme\`) returns them.]`);
   assert.ok(Buffer.byteLength(text) <= 9500);
 });
 
@@ -285,7 +285,7 @@ test('SessionStart: domain rules, then user rules, then threads and projects; lo
   assert.ok(at('domain-rule') > 0 && at('domain-rule') < at('user-rule'));
   assert.ok(at('user-rule') < at('xxx') && at('xxx') < at('sub-save'));
   assert.doesNotMatch(text, /ppp|fff/);
-  assert.match(text.split('\n').at(-1), /^\[Brainlink: left out to fit the hook limit: you\.facts, workingDomain\.pickUpHere\./);
+  assert.match(text.split('\n').at(-1), /^\[Brainlink: 2 sections were left out to fit the hook limit\./);
 });
 
 test('SessionStart: a warmhand-sized view keeps every domain rule, whole user rules as fit, and counts the rest', () => {
@@ -312,8 +312,35 @@ test('SessionStart: a warmhand-sized view keeps every domain rule, whole user ru
   const left = all.length - kept.length;
   assert.equal(
     lines.at(-1),
-    `[Brainlink: ${left} binding rules were left out to fit the hook limit, and the sections guidance, workingDomain.pickUpHere. Call get_started({ domain: 'acme' }) now to read them, and follow them before acting.]`,
+    `[Brainlink: ${left} binding rules were left out to fit the hook limit, and 2 other sections. Call get_started({ domain: 'acme' }) (no Brainlink tools: run \`brainlink get_started --domain acme\`) now to read them, and follow them before acting.]`,
   );
+});
+
+test('SessionStart: the cut line is small and fixed, so many left-out sections never push out a rule that fits', () => {
+  // 21 rules (about 8.7 KB) fit beside a fixed note, but not beside one
+  // naming 40 long section names (about 1.6 KB).
+  const rule = (s) => ({ slug: s, content: `${s} says ${'z'.repeat(380 - s.length)}` });
+  const started = { workingDomain: { rules: Array.from({ length: 15 }, (_, i) => rule(`dom-${i}`)) }, you: { rules: Array.from({ length: 6 }, (_, i) => rule(`usr-${i}`)) } };
+  for (let i = 0; i < 40; i++) started[`a-section-with-a-rather-long-name-${i}`] = 'x'.repeat(10000);
+  const text = startedWith(started);
+  assert.ok(Buffer.byteLength(text) <= 9500);
+  assert.equal(text.split('\n').filter((l) => l.startsWith('{"slug":')).length, 21);
+  assert.match(text.split('\n').at(-1), /^\[Brainlink: 40 sections were left out to fit the hook limit\./);
+});
+
+test('fitView: a rule heading that does not fit takes its rules with it', () => {
+  // A section too big for any budget forces the cut pass. There, the domain
+  // rule leaves 30 bytes: room for the user rule's line, not its heading.
+  const header = 'h';
+  const title = 'workingDomain.rules (binding here; they win over you.rules on conflict):';
+  const note = (rules) => `[Brainlink: ${rules} binding rule${rules === 1 ? ' was' : 's were'} left out to fit the hook limit, and 1 other section. Call get_started({ domain: 'acme' }) (no Brainlink tools: run \`brainlink get_started --domain acme\`) now to read them, and follow them before acting.]`;
+  const left = 9500 - Buffer.byteLength(note(2)) - 1 - 2 - (title.length + 1) - 30;
+  const content = 'z'.repeat(left - 1 - JSON.stringify({ slug: 'd', content: '' }).length);
+  const view = { workingDomain: { rules: [{ slug: 'd', content }] }, you: { rules: [{ slug: 'u', content: 'c' }] }, big: 'x'.repeat(10000) };
+  const text = fitView(view, 'acme', header, 9500);
+  assert.match(text, /"slug":"d"/);
+  assert.doesNotMatch(text, /"slug":"u"|^you\.rules/m);
+  assert.equal(text.split('\n').at(-1), note(1));
 });
 
 test('SessionStart: a view that fits comes whole, with no cut line', () => {

@@ -87,7 +87,7 @@ export function capBytes(text, max) {
 // per line, then the open threads and projects, then everything else in the
 // order get_started sent it. Over `max`, a rule is kept whole or left out, and
 // every other section too, so no cut lands inside either. A cut ends with
-// cutNote, room for which is reserved up front.
+// cutNote, which counts rather than names, so the room it takes stays small.
 const RULE_SETS = [
   ['workingDomain.rules', 'binding here; they win over you.rules on conflict'],
   ['you.rules', 'binding in every domain'],
@@ -95,10 +95,9 @@ const RULE_SETS = [
 const NEXT = ['workingDomain.openThreads', 'workingDomain.projects', 'workingDomain.staleProjects', 'workingDomain.pointers', 'fromSubagents', 'guidance'];
 
 const cutNote = (domain, rules, sections) => {
-  const also = sections.length ? `, and the sections ${sections.join(', ')}` : '';
-  if (rules) return `[Brainlink: ${rules} binding rule${rules === 1 ? ' was' : 's were'} left out to fit the hook limit${also}. Call get_started({ domain: '${domain}' }) now to read them, and follow them before acting.]`;
-  if (sections.length) return `[Brainlink: left out to fit the hook limit: ${sections.join(', ')}. get_started({ domain: '${domain}' }) returns them.]`;
-  return '';
+  const call = `get_started({ domain: '${domain}' }) (no Brainlink tools: run \`brainlink get_started --domain ${domain}\`)`;
+  if (rules) return `[Brainlink: ${rules} binding rule${rules === 1 ? ' was' : 's were'} left out to fit the hook limit, and ${sections} other section${sections === 1 ? '' : 's'}. Call ${call} now to read them, and follow them before acting.]`;
+  return `[Brainlink: ${sections} section${sections === 1 ? ' was' : 's were'} left out to fit the hook limit. ${call} returns them.]`;
 };
 
 export function fitView(view, domain, header, max) {
@@ -127,17 +126,19 @@ export function fitView(view, domain, header, max) {
     take(header);
     let rulesLeftOut = 0;
     for (const [title, items] of rules) {
-      take(title);
-      for (const r of items) if (!take(JSON.stringify(r))) rulesLeftOut++;
+      // No heading, no rules under it: they would read as the other set's.
+      if (!take(title)) rulesLeftOut += items.length;
+      else for (const r of items) if (!take(JSON.stringify(r))) rulesLeftOut++;
     }
-    const sectionsLeftOut = rest.filter((n) => !take(`${n}: ${JSON.stringify(sections.get(n))}`));
-    return { lines, note: cutNote(domain, rulesLeftOut, sectionsLeftOut) };
+    const sectionsLeftOut = rest.filter((n) => !take(`${n}: ${JSON.stringify(sections.get(n))}`)).length;
+    return { lines, rulesLeftOut, sectionsLeftOut };
   };
   const whole = fit(max);
-  if (!whole.note) return whole.lines.join('\n');
+  if (whole.rulesLeftOut === 0 && whole.sectionsLeftOut === 0) return whole.lines.join('\n');
+  // Room for the largest note: every count at its upper bound.
   const ruleCount = rules.reduce((n, [, items]) => n + items.length, 0);
-  const cut = fit(max - Buffer.byteLength(cutNote(domain, ruleCount, rest)) - 1);
-  return [...cut.lines, cut.note].join('\n');
+  const cut = fit(max - Buffer.byteLength(cutNote(domain, ruleCount, rest.length)) - 1);
+  return [...cut.lines, cutNote(domain, cut.rulesLeftOut, cut.sectionsLeftOut)].join('\n');
 }
 
 export function emit(eventName, text, max) {
