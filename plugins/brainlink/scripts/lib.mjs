@@ -96,7 +96,7 @@ const NEXT = ['workingDomain.openThreads', 'workingDomain.projects', 'workingDom
 
 const cutNote = (domain, rules, sections) => {
   const call = `get_started({ domain: '${domain}' }) (no Brainlink tools: run \`brainlink get_started --domain ${domain}\`)`;
-  if (rules) return `[Brainlink: ${rules} binding rule${rules === 1 ? ' was' : 's were'} left out to fit the hook limit, and ${sections} other section${sections === 1 ? '' : 's'}. Call ${call} now to read them, and follow them before acting.]`;
+  if (rules) return `[Brainlink: ${rules} binding rule${rules === 1 ? ' was' : 's were'} left out to fit the hook limit${sections ? `, and ${sections} other section${sections === 1 ? '' : 's'}` : ''}. Call ${call} now to read them, and follow them before acting.]`;
   return `[Brainlink: ${sections} section${sections === 1 ? ' was' : 's were'} left out to fit the hook limit. ${call} returns them.]`;
 };
 
