@@ -15,7 +15,10 @@ const call = (args, ownMs) => {
 failOpen(() => {
   const input = readInput();
   const domain = findDomain(input.cwd);
-  if (!domain) return;
+  if (!domain) {
+    emit('SessionStart', 'Brainlink: no domain is set for this project. Call get_started() without a domain (it returns the domain map), ask the user which domain this project belongs to, then write that slug to a `.brainlink` file at the repo root.', SESSION_CAP_BYTES);
+    return;
+  }
   const started = call(['get_started', '--domain', domain], 10000);
   if (started) emit('SessionStart', capNamingRules(`Brainlink get_started (${domain}):\n${layout(started)}`, started, domain), SESSION_CAP_BYTES);
   // No CLI, not logged in, or no answer: the agent enters through its own MCP connection.

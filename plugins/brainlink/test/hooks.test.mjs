@@ -70,14 +70,14 @@ test('SessionStart: get_started for BRAINLINK_DOMAIN as additionalContext', () =
   assert.match(ctx(r.out), /rules for acme/);
 });
 
-test('SessionStart: domain from .brainlink file; nothing at all when absent', () => {
+test('SessionStart: domain from .brainlink file; a no-domain hint when absent', () => {
   const e = env();
   writeFileSync(join(e.root, '.brainlink'), 'filedom\n');
   assert.match(ctx(e.run('session-start.mjs', { session_id: 's', cwd: e.root }).out), /rules for filedom/);
   const bare = env();
   const r = bare.run('session-start.mjs', { session_id: 's', cwd: bare.root });
   assert.equal(r.status, 0);
-  assert.equal(r.out, '');
+  assert.match(ctx(r.out), /get_started\(\) without a domain.*\.brainlink/);
 });
 
 test('SessionStart: a .brainlink above the repo root is ignored', () => {
@@ -87,7 +87,8 @@ test('SessionStart: a .brainlink above the repo root is ignored', () => {
   mkdirSync(join(repo, '.git'), { recursive: true });
   const r = e.run('session-start.mjs', { session_id: 's', cwd: repo });
   assert.equal(r.status, 0);
-  assert.equal(r.out, '');
+  assert.doesNotMatch(r.out, /outerdom/);
+  assert.match(ctx(r.out), /no domain is set/);
 });
 
 test('SessionStart: caches when:<Tool> memories (one search, tags past the first 100), private modes', () => {
