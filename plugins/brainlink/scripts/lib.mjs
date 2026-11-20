@@ -113,18 +113,21 @@ export function emit(eventName, text, max) {
 }
 
 // BRAINLINK_DOMAIN, else the first line of the nearest `.brainlink` file at or above cwd.
-export function findDomain(cwd) {
-  const ok = (s) => (/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(s || '') ? s : null);
-  const env = ok((process.env.BRAINLINK_DOMAIN || '').trim());
-  if (env) return env;
+// state: 'set' (domain is the slug), 'invalid' (a non-slug), 'none' (an empty
+// .brainlink: the user said this project has no domain) or 'absent'.
+export function domainState(cwd) {
+  const ok = (s) => /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(s);
+  const read = (v) => (v === '' ? { state: 'none' } : ok(v) ? { state: 'set', domain: v } : { state: 'invalid' });
+  const env = (process.env.BRAINLINK_DOMAIN || '').trim();
+  if (env) return read(env);
   let dir = cwd || process.cwd();
   for (let i = 0; i < 40; i++) {
     const f = join(dir, '.brainlink');
     if (existsSync(f)) {
       try {
-        return ok(readFileSync(f, 'utf8').split('\n')[0].trim());
+        return read(readFileSync(f, 'utf8').split('\n')[0].trim());
       } catch {
-        return null;
+        return { state: 'invalid' };
       }
     }
     // Stop at the repo root or the home folder: a .brainlink above them is
@@ -134,8 +137,10 @@ export function findDomain(cwd) {
     if (up === dir) break;
     dir = up;
   }
-  return null;
+  return { state: 'absent' };
 }
+
+export const findDomain = (cwd) => domainState(cwd).domain ?? null;
 
 // The `items` of a search result: [{ slug, preview, tags, ... }]. Non-JSON gives [].
 export function parseItems(raw) {

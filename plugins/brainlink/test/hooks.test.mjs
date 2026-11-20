@@ -77,7 +77,35 @@ test('SessionStart: domain from .brainlink file; a no-domain hint when absent', 
   const bare = env();
   const r = bare.run('session-start.mjs', { session_id: 's', cwd: bare.root });
   assert.equal(r.status, 0);
-  assert.match(ctx(r.out), /get_started\(\) without a domain.*\.brainlink/);
+  assert.match(ctx(r.out), /^Brainlink: If this project belongs to a Brainlink domain: call get_started without a domain for the map, propose a slug to the user \(none is a valid answer\), and only after they confirm write it to \.brainlink/);
+});
+
+test('SessionStart: an empty .brainlink means none and emits nothing', () => {
+  const e = env();
+  writeFileSync(join(e.root, '.brainlink'), '\n');
+  const r = e.run('session-start.mjs', { session_id: 's', cwd: e.root });
+  assert.equal(r.status, 0);
+  assert.equal(r.out, '');
+});
+
+test('SessionStart: a non-slug .brainlink gets one line saying so', () => {
+  const e = env();
+  writeFileSync(join(e.root, '.brainlink'), 'not a slug!\n');
+  const r = e.run('session-start.mjs', { session_id: 's', cwd: e.root });
+  assert.match(ctx(r.out), /not a domain slug/);
+  assert.doesNotMatch(r.out, /rules for/);
+});
+
+test('SessionStart: the nearest .brainlink wins over the repo root one', () => {
+  const e = env();
+  mkdirSync(join(e.root, '.git'), { recursive: true });
+  writeFileSync(join(e.root, '.brainlink'), 'rootdom\n');
+  const sub = join(e.root, 'pkg', 'app');
+  mkdirSync(sub, { recursive: true });
+  writeFileSync(join(e.root, 'pkg', '.brainlink'), 'subdom\n');
+  const r = e.run('session-start.mjs', { session_id: 's', cwd: sub });
+  assert.match(ctx(r.out), /rules for subdom/);
+  assert.doesNotMatch(r.out, /rootdom/);
 });
 
 test('SessionStart: a .brainlink above the repo root is ignored', () => {
@@ -88,7 +116,7 @@ test('SessionStart: a .brainlink above the repo root is ignored', () => {
   const r = e.run('session-start.mjs', { session_id: 's', cwd: repo });
   assert.equal(r.status, 0);
   assert.doesNotMatch(r.out, /outerdom/);
-  assert.match(ctx(r.out), /no domain is set/);
+  assert.match(ctx(r.out), /If this project belongs to a Brainlink domain/);
 });
 
 test('SessionStart: caches when:<Tool> memories (one search, tags past the first 100), private modes', () => {
