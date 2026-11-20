@@ -8,6 +8,7 @@ claude plugin marketplace add ugglr/brainlink-plugins && claude plugin install b
 
 # Codex
 codex plugin marketplace add ugglr/brainlink-plugins && codex plugin add brainlink@brainlink
+codex mcp login brainlink
 ```
 
 What the plugin does and how to sign in: [plugins/brainlink/README.md](plugins/brainlink/README.md).
