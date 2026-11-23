@@ -187,7 +187,7 @@ test('SessionStart: a non-executable or directory brainlink earlier in PATH is s
     encoding: 'utf8',
     env: { PATH: `${early}:${early2}:${join(e.root, 'bin')}:/usr/bin:/bin`, CLAUDE_PLUGIN_DATA: join(e.root, 'data'), BRAINLINK_DOMAIN: 'acme' },
   });
-  assert.match(ctx(r.stdout), /^Brainlink get_started \(acme\)/);
+  assert.match(ctx(r.stdout), /^Brainlink get_started \(acme\), already called for you\./);
 });
 
 test('every hook fails open: missing CLI or CLI failure leaves one get_started line; garbage stdin nothing', () => {
