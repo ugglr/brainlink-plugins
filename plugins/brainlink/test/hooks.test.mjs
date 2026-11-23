@@ -232,6 +232,33 @@ test('SubagentStart: the rules SessionStart cached, with no CLI; benchmark arms 
   }
 });
 
+const subagentRules = (rules) => {
+  const e = env();
+  mkdirSync(e.data, { recursive: true });
+  writeFileSync(join(e.data, 'rules-s1.json'), JSON.stringify({ domain: 'acme', workingDomain: { rules: rules.dom }, you: { rules: rules.usr } }));
+  return ctx(e.run('subagent-start.mjs', { session_id: 's1', agent_type: 'x' }).out);
+};
+
+test('SubagentStart: each rule is one `- ` line, no slug, basis kept', () => {
+  const text = subagentRules({
+    dom: [{ slug: 'dom-a', content: 'domain rule', basis: 'inferred' }],
+    usr: [{ slug: 'usr-a', content: 'user rule' }],
+  });
+  const lines = text.split('\n');
+  assert.ok(lines.includes('- domain rule (basis: inferred)'));
+  assert.ok(lines.includes('- user rule'));
+  assert.doesNotMatch(text, /dom-a|usr-a|"slug"/);
+});
+
+test('SubagentStart: over the cap, the note still names the left-out count', () => {
+  const rule = (i) => ({ slug: `r${i}`, content: `${i} ${'z'.repeat(900)}` });
+  const text = subagentRules({ dom: Array.from({ length: 12 }, (_, i) => rule(i)), usr: [] });
+  assert.ok(Buffer.byteLength(text) <= 9500);
+  const kept = text.split('\n').filter((l) => l.startsWith('- ')).length;
+  assert.ok(kept > 0 && kept < 12);
+  assert.match(text.split('\n').at(-1), new RegExp(`^\\[Brainlink: ${12 - kept} binding rules? (was|were) left out`));
+});
+
 test('PreToolUse: needs no CLI; a corrupt cache fails open', () => {
   const none = env({ stub: false });
   mkdirSync(none.data, { recursive: true });

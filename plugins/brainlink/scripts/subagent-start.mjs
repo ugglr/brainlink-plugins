@@ -14,5 +14,7 @@ failOpen(() => {
   const raw = readFileSync(join(dir, `rules-${input.session_id}.json`), 'utf8');
   const { domain, ...rules } = JSON.parse(raw);
   const header = `Brainlink (${domain}): binding rules for this subagent; where the two sets conflict, the domain's win. Durable findings (a decision, a measurement, a blocker): save them if you have Brainlink tools, else include them in your report.`;
-  emit('SubagentStart', fitView(rules, domain, header, SESSION_CAP_BYTES), SESSION_CAP_BYTES);
+  // A subagent follows rules, never edits them: a plain line each, no slug.
+  const line = (r) => `- ${r.content}${r.basis ? ` (basis: ${r.basis})` : ''}`;
+  emit('SubagentStart', fitView(rules, domain, header, SESSION_CAP_BYTES, line), SESSION_CAP_BYTES);
 });
