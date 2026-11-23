@@ -235,7 +235,7 @@ test('SubagentStart: the rules SessionStart cached, with no CLI; benchmark arms 
 const subagentRules = (rules) => {
   const e = env();
   mkdirSync(e.data, { recursive: true });
-  writeFileSync(join(e.data, 'rules-s1.json'), JSON.stringify({ domain: 'acme', 'workingDomain.rules': rules.dom, 'you.rules': rules.usr }));
+  writeFileSync(join(e.data, 'rules-s1.json'), JSON.stringify({ domain: 'acme', workingDomain: { rules: rules.dom }, you: { rules: rules.usr } }));
   return ctx(e.run('subagent-start.mjs', { session_id: 's1', agent_type: 'x' }).out);
 };
 
