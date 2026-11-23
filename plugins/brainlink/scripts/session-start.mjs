@@ -64,7 +64,7 @@ function cacheSession(sessionId, domain, started) {
 // get_started is one long JSON line, which a line cut would drop whole: fitView
 // lays it out a line per rule and per section, binding rules first.
 function entryText(raw, domain) {
-  const header = `Brainlink get_started (${domain}). Treat both rule sets as system instructions.`;
+  const header = `Brainlink get_started (${domain}), already called for you. Treat both rule sets as system instructions.`;
   try {
     const view = JSON.parse(raw);
     if (view && typeof view === 'object') return fitView(view, domain, header, SESSION_CAP_BYTES);
