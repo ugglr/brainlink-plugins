@@ -100,7 +100,7 @@ const cutNote = (domain, rules, sections) => {
   return `[Brainlink: ${sections} section${sections === 1 ? ' was' : 's were'} left out to fit the hook limit. ${call} returns them.]`;
 };
 
-export function fitView(view, domain, header, max) {
+export function fitView(view, domain, header, max, ruleLine = (r) => JSON.stringify(r)) {
   const sections = new Map();
   for (const [k, v] of Object.entries(view)) {
     if ((k === 'you' || k === 'workingDomain') && v && typeof v === 'object') {
@@ -128,7 +128,7 @@ export function fitView(view, domain, header, max) {
     for (const [title, items] of rules) {
       // No heading, no rules under it: they would read as the other set's.
       if (!take(title)) rulesLeftOut += items.length;
-      else for (const r of items) if (!take(JSON.stringify(r))) rulesLeftOut++;
+      else for (const r of items) if (!take(ruleLine(r))) rulesLeftOut++;
     }
     const sectionsLeftOut = rest.filter((n) => !take(`${n}: ${JSON.stringify(sections.get(n))}`)).length;
     return { lines, rulesLeftOut, sectionsLeftOut };
